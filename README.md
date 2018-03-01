@@ -1,9 +1,11 @@
+# Crate
+
 Crate is an extensible C library providing a set of common data structures and a way to persist them to disk.
 
 A desire to have python-like serialization features, i.e. ``pickle```, but in a C environment spurred the creation of this library.
 
 ---
-# The Crate Interface
+### The Crate Interface
 
 This libraries central concept is storing data in crates. Crates may be persisted to a file on disk at any time and then loaded from that file at any point in the future. The ```dsCrate``` structure implements this central concept with the public API in ```crate.h```.
 
@@ -45,7 +47,7 @@ dsSnapshot("path/to/snapshot");
 ```
 
 ---
-# Data Structures
+### Data Structures
 
 This library also provides a set of common data structures that all sit on top of the ```dsCrate``` interface. That means each data structure is persisted to a crate file and snapshots be taken.
 
