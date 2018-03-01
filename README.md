@@ -22,8 +22,7 @@ Instead of having to pass the ```dsCrate``` handle to nearly every function in t
 dsSet(crate);
 ```
 
-The ```dsCrate``` interface is thread-safe.
-A program may have several crates open simultaneously and each is thread-safe. The ```dsSet()``` API uses thread-local storage so that each thread may set a different 'active' crate, but only one 'active' crate per-thread.
+A program may have several crates open simultaneously. Since the ```dsCrate``` interface is thread-safe and the ```dsSet()``` API uses thread-local storage, each thread may set a different 'active' crate. But, there can be only one 'active' crate per-thread.
 
 Use ```dsAlloc()``` and ```dsFree()``` to add and remove data from a create.
 ```c
