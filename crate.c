@@ -54,12 +54,12 @@ typedef struct dsMapping {
 	struct dsMapping *next;
 } dsMapping;
 
-typedef struct dsObjectStore {
+typedef struct dsCrate {
 	char *filename;
 	int fd;
 	dsMapping map;
 	dsSuperObject *super;
-} dsObjectStore;
+} dsCrate;
 
 /*
  * Thread specifics.
@@ -76,7 +76,7 @@ makeKey()
 	}
 }
 
-static dsObjectStore *
+static dsCrate *
 getdsObjectStore()
 {
 	pthread_once(&keyOnce, makeKey);
@@ -88,26 +88,26 @@ getdsObjectStore()
 }
 
 static void *
-mapObject(dsObjectStore *store, uint64_t offset, uint64_t length)
+mapObject(dsCrate *crate, uint64_t offset, uint64_t length)
 {
-	if (store == NULL) {
-		log("Bad argument %p\n", store);
+	if (crate == NULL) {
+		log("Bad argument %p\n", crate);
 		return NULL;
 	}
 
-	if ((offset < store->map.offset) ||
-		(offset + length > store->map.offset + store->map.length)) {
-		log("Can't map region outside of object store.\n");
+	if ((offset < crate->map.offset) ||
+		(offset + length > crate->map.offset + crate->map.length)) {
+		log("Can't map region outside of object crate.\n");
 		return NULL;
 	}
 
-	return store->map.ptr + offset;
+	return crate->map.ptr + offset;
 }
 
 static void
-unmapObject(dsObjectStore *store, void *address)
+unmapObject(dsCrate *crate, void *address)
 {
-	store = address = NULL;
+	crate = address = NULL;
 	return;
 }
 
@@ -125,17 +125,17 @@ freedsMapping(dsMapping *mapping)
 }
 
 uint64_t
-objectOffsetLIB(dsObjectStore *store, void *address)
+objectOffsetLIB(dsCrate *crate, void *address)
 {
 	/*
 	 * We only support a single giant mapping, for now.
 	 */
-	if ((intptr_t)address < (intptr_t)store->map.ptr) {
-		log("Pointer falls outside of the object store.\n");
+	if ((intptr_t)address < (intptr_t)crate->map.ptr) {
+		log("Pointer falls outside of the object crate.\n");
 		return UINT64_MAX;
 	}
 
-	return (intptr_t)address - (intptr_t)store->map.ptr;
+	return (intptr_t)address - (intptr_t)crate->map.ptr;
 }
 
 static inline uint64_t
@@ -146,29 +146,29 @@ getRealLength(uint64_t length)
 
 #if 0
 static dsObject *
-prevObject(dsObjectStore *store, dsObject *object)
+prevObject(dsCrate *crate, dsObject *object)
 {
 	dsObject *prev;
 	uint64_t offset;
 	uint64_t *trailer;
 
-	if ((offset = objectOffsetLIB(store, object)) == UINT64_MAX) {
+	if ((offset = objectOffsetLIB(crate, object)) == UINT64_MAX) {
 		log("Can't get object offset.\n");
 		return (void *)-1;
 	}
 
-	if (offset == store->super->firstObjectOffset) {
+	if (offset == crate->super->firstObjectOffset) {
 		return NULL;
 	}
 
-	if ((trailer = mapObject(store, offset-sizeof(*trailer),
+	if ((trailer = mapObject(crate, offset-sizeof(*trailer),
 							 sizeof(*trailer))) == NULL) {
 		log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 			offset-sizeof(*trailer), sizeof(*trailer));
 		return (void *)-1;
 	}
 
-	if ((prev = mapObject(store, *trailer, sizeof(*prev))) == NULL) {
+	if ((prev = mapObject(crate, *trailer, sizeof(*prev))) == NULL) {
 		log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 			*trailer, sizeof(*prev));
 		return (void *)-1;
@@ -179,7 +179,7 @@ prevObject(dsObjectStore *store, dsObject *object)
 #endif
 
 static dsObject *
-nextObject(dsObjectStore *store, dsObject *object)
+nextObject(dsCrate *crate, dsObject *object)
 {
 	dsObject *next;
 	uint64_t offset;
@@ -188,12 +188,12 @@ nextObject(dsObjectStore *store, dsObject *object)
 		return NULL;
 	}
 
-	if ((offset = objectOffsetLIB(store, object)) == UINT64_MAX) {
+	if ((offset = objectOffsetLIB(crate, object)) == UINT64_MAX) {
 		log("Can't get object offset.\n");
 		return (void *)-1;
 	}
 
-	if ((next = mapObject(store, offset + getRealLength(object->length),
+	if ((next = mapObject(crate, offset + getRealLength(object->length),
 						  sizeof(*next))) == NULL) {
 		log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 			offset + object->length, sizeof(*next));
@@ -218,19 +218,19 @@ setObjectTrailer(dsObject *object, uint64_t objectOffset)
 }
 
 static uint64_t
-getObjectTrailer(dsObjectStore *store, dsObject *object)
+getObjectTrailer(dsCrate *crate, dsObject *object)
 {
 	dsObject *fullObject;
 	uint64_t offset;
 	uint64_t length;
 
-	if ((offset = objectOffsetLIB(store, object)) == UINT64_MAX) {
+	if ((offset = objectOffsetLIB(crate, object)) == UINT64_MAX) {
 		log("Can't get object offset.\n");
 		return UINT64_MAX;
 	}
 
 	length = getRealLength(object->length);
-	if ((fullObject = mapObject(store, offset, length)) == NULL) {
+	if ((fullObject = mapObject(crate, offset, length)) == NULL) {
 		log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 			offset, length);
 		return UINT64_MAX;
@@ -241,27 +241,27 @@ getObjectTrailer(dsObjectStore *store, dsObject *object)
 
 	trailerOffset = length - sizeof(trailer);
 	trailer = *(uint64_t *)((uintptr_t)object + trailerOffset);
-	unmapObject(store, fullObject);
+	unmapObject(crate, fullObject);
 
 	return trailer;
 }
 
 static int
-debugDump(dsObjectStore *store)
+debugDump(dsCrate *crate)
 {
 	dsObject *object;
 	int i;
 
-	if ((object = mapObject(store, store->super->firstObjectOffset,
+	if ((object = mapObject(crate, crate->super->firstObjectOffset,
 						 	sizeof(*object))) == NULL) {
 		log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
-			store->super->firstObjectOffset, sizeof(*object));
+			crate->super->firstObjectOffset, sizeof(*object));
 		return -1;
 	}
 
 	log("i, head\n");
 	for (i = 0; i < objectStoreGroups; i++) {
-		log("%d %-20" PRIu64 "\n", i, store->super->headGroupOffset[i]);
+		log("%d %-20" PRIu64 "\n", i, crate->super->headGroupOffset[i]);
 	}
 
 	log("%-20s: %-4s %-4s %-20s %-20s %-20s\n",
@@ -269,7 +269,7 @@ debugDump(dsObjectStore *store)
 	while (object != NULL) {
 		uint64_t offset;
 
-		if ((offset = objectOffsetLIB(store, object)) == UINT64_MAX) {
+		if ((offset = objectOffsetLIB(crate, object)) == UINT64_MAX) {
 			log("Can't get object offset.\n");
 			return -1;
 		}
@@ -282,9 +282,9 @@ debugDump(dsObjectStore *store)
 			object->length & freeObjectBit ? "y" : "n",
 			object->length & lastObjectBit ? "y" : "n",
 			getRealLength(object->length), object->nextGroupOffset,
-			getObjectTrailer(store, object));
+			getObjectTrailer(crate, object));
 
-		if ((object = nextObject(store, object)) == (void *)-1) {
+		if ((object = nextObject(crate, object)) == (void *)-1) {
 			log("Can't get next object.\n");
 			return -1;
 		}
@@ -294,14 +294,14 @@ debugDump(dsObjectStore *store)
 }
 
 static int
-unlinkFromGroup(dsObjectStore *store, dsObject *freeObject,
+unlinkFromGroup(dsCrate *crate, dsObject *freeObject,
 				uint64_t freeObjectOffset, int group)
 {
 	if (group >= objectStoreGroups) {
 		log("Group does not exist.\n");
 		return -1;
 	}
-	if (store->super->headGroupOffset[group] != freeObjectOffset) {
+	if (crate->super->headGroupOffset[group] != freeObjectOffset) {
 		log("Free object isn't head of group.\n");
 		return -1;
 	}
@@ -309,14 +309,14 @@ unlinkFromGroup(dsObjectStore *store, dsObject *freeObject,
 	/*
 	 * Remove from the group.
 	 */
-	store->super->headGroupOffset[group] = freeObject->nextGroupOffset;
+	crate->super->headGroupOffset[group] = freeObject->nextGroupOffset;
 	freeObject->nextGroupOffset = UINT64_MAX;
 
 	return 0;
 }
 
 static int
-linkToGroup(dsObjectStore *store, dsObject *freeObject,
+linkToGroup(dsCrate *crate, dsObject *freeObject,
 			uint64_t freeObjectOffset, int group)
 {
 	if (group >= objectStoreGroups) {
@@ -327,8 +327,8 @@ linkToGroup(dsObjectStore *store, dsObject *freeObject,
 	/*
 	 * Add to the new group.
 	 */
-	freeObject->nextGroupOffset = store->super->headGroupOffset[group];
-	store->super->headGroupOffset[group] = freeObjectOffset;
+	freeObject->nextGroupOffset = crate->super->headGroupOffset[group];
+	crate->super->headGroupOffset[group] = freeObjectOffset;
 
 	return 0;
 }
@@ -347,7 +347,7 @@ getGroup(uint64_t length)
 }
 
 static void *
-allocateObject(dsObjectStore *store, uint64_t length)
+allocateObject(dsCrate *crate, uint64_t length)
 {
 	dsObject *newObject;
 	dsObject *freeObject;
@@ -356,7 +356,7 @@ allocateObject(dsObjectStore *store, uint64_t length)
 	uint64_t realObjectLength;
 	int group;
 
-	debugDump(store);
+	debugDump(crate);
 
 	lengthToAlloc = length + objectOverhead;
 
@@ -367,7 +367,7 @@ allocateObject(dsObjectStore *store, uint64_t length)
 
 	for (; group < objectStoreGroups; group++) {
 
-		nextGroupOffset = store->super->headGroupOffset[group];
+		nextGroupOffset = crate->super->headGroupOffset[group];
 
 		if (nextGroupOffset == UINT64_MAX) {
 			/*
@@ -379,7 +379,7 @@ allocateObject(dsObjectStore *store, uint64_t length)
 		/*
 		 * The first group entry will do.
 		 */
-		if ((freeObject = mapObject(store, nextGroupOffset,
+		if ((freeObject = mapObject(crate, nextGroupOffset,
 									sizeof(*freeObject))) == NULL) {
 			log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 				nextGroupOffset, sizeof(*freeObject));
@@ -387,7 +387,7 @@ allocateObject(dsObjectStore *store, uint64_t length)
 		}
 		if ((freeObject->length & freeObjectBit) == 0) {
 			log("Object should be free but isn't.\n");
-			unmapObject(store, freeObject);
+			unmapObject(crate, freeObject);
 			return NULL;
 		}
 		realObjectLength = getRealLength(freeObject->length);
@@ -398,25 +398,25 @@ allocateObject(dsObjectStore *store, uint64_t length)
 			 */
 			if (lengthToAlloc > realObjectLength + objectOverhead + 1) {
 				/*
-				 * But, it isn't large enough. Grow the object store.
+				 * But, it isn't large enough. Grow the object crate.
 				 */
 			}
 		}
 
 		if (lengthToAlloc > realObjectLength) {
 			log("Object groups are corrupt!\n");
-			unmapObject(store, freeObject);
+			unmapObject(crate, freeObject);
 			return NULL;
 		}
 
-		if (unlinkFromGroup(store, freeObject, nextGroupOffset, group) < 0) {
+		if (unlinkFromGroup(crate, freeObject, nextGroupOffset, group) < 0) {
 			log("Can't unlink free object.\n");
-			unmapObject(store, freeObject);
+			unmapObject(crate, freeObject);
 			return NULL;
 		}
 
-		unmapObject(store, freeObject);
-		if ((freeObject = mapObject(store, nextGroupOffset,
+		unmapObject(crate, freeObject);
+		if ((freeObject = mapObject(crate, nextGroupOffset,
 									realObjectLength)) == NULL) {
 			log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 				nextGroupOffset, realObjectLength);
@@ -451,9 +451,9 @@ allocateObject(dsObjectStore *store, uint64_t length)
 			}
 
 			newGroup = getGroup(length);
-			if (linkToGroup(store, freeObject, offset, newGroup) < 0) {
+			if (linkToGroup(crate, freeObject, offset, newGroup) < 0) {
 				log("Can't link free object.\n");
-				unmapObject(store, freeObject);
+				unmapObject(crate, freeObject);
 				return NULL;
 			}
 		}
@@ -465,7 +465,7 @@ allocateObject(dsObjectStore *store, uint64_t length)
 		newObject->nextGroupOffset = UINT64_MAX;
 		setObjectTrailer(newObject, nextGroupOffset);
 
-		debugDump(store);
+		debugDump(crate);
 
 		return newObject;
 	}
@@ -474,147 +474,147 @@ allocateObject(dsObjectStore *store, uint64_t length)
 }
 
 static void
-freedsObjectStore(dsObjectStore **store)
+freedsObjectStore(dsCrate **crate)
 {
-	if (store == NULL || *store == NULL) {
+	if (crate == NULL || *crate == NULL) {
 		return;
 	}
 
-	if ((*store)->fd >= 0) {
-		close((*store)->fd);
-		(*store)->fd = -1;
+	if ((*crate)->fd >= 0) {
+		close((*crate)->fd);
+		(*crate)->fd = -1;
 	}
 
-	freedsMapping(&(*store)->map);
+	freedsMapping(&(*crate)->map);
 
-	free(*store);
-	*store = NULL;
+	free(*crate);
+	*crate = NULL;
 }
 
 static void *
 allocatedsObjectStore(const char *filename, int create)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 	struct stat statBuffer;
 	int flags = 0;
 
-	if ((store = malloc(sizeof(*store))) == NULL) {
-		log("Can't allocate object store.\n");
+	if ((crate = malloc(sizeof(*crate))) == NULL) {
+		log("Can't allocate object crate.\n");
 		return NULL;
 	}
-	memset(store, 0, sizeof(*store));
-	store->filename = strdup(filename);
+	memset(crate, 0, sizeof(*crate));
+	crate->filename = strdup(filename);
 
 	flags = O_RDWR | O_NOATIME;
 	if (create) {
 		flags |= O_CREAT;
 	}
 
-	if ((store->fd = open(filename, flags, S_IRUSR | S_IWUSR)) < 0) {
+	if ((crate->fd = open(filename, flags, S_IRUSR | S_IWUSR)) < 0) {
 		log("Can't open %s: %s\n", filename, strerror(errno));
 		return NULL;
 	}
 
-	if (fstat(store->fd, &statBuffer) < 0) {
+	if (fstat(crate->fd, &statBuffer) < 0) {
 		log("Can't fstat(%s,): %s\n", filename, strerror(errno));
 		return NULL;
 	}
 
-	//store->map.length = 32ULL*(1<<30);
-	store->map.length = 5*(1<<20); // 90,000
-	//store->map.length = 500*(1<<20); // 10,000,000
+	//crate->map.length = 32ULL*(1<<30);
+	crate->map.length = 5*(1<<20); // 90,000
+	//crate->map.length = 500*(1<<20); // 10,000,000
 	if (statBuffer.st_size == 0) {
 		/*
 		 * Create a giant fixed size sparse file.
 		 */
-		if (ftruncate(store->fd, store->map.length) < 0) {
+		if (ftruncate(crate->fd, crate->map.length) < 0) {
 			log("Can't ftruncate(%s, %" PRIu64 "): %s\n", filename,
-				store->map.length, strerror(errno));
+				crate->map.length, strerror(errno));
 			return NULL;
 		}
 	}
-	if ((store->map.ptr = mmap(0, store->map.length,
+	if ((crate->map.ptr = mmap(0, crate->map.length,
 							   PROT_READ | PROT_WRITE,
-							   MAP_SHARED, store->fd, 0)) == MAP_FAILED) {
+							   MAP_SHARED, crate->fd, 0)) == MAP_FAILED) {
 		log("Can't map shared memory: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	store->super = store->map.ptr;
-	if (store->super->magic != MAGIC_LIB_SUPER) {
+	crate->super = crate->map.ptr;
+	if (crate->super->magic != MAGIC_LIB_SUPER) {
 		dsObject *freeObject;
 		int i;
 
 		/*
-		 * This object store needs a super object.
+		 * This object crate needs a super object.
 		 */
-		store->super->magic = MAGIC_LIB_SUPER;
-		store->super->version = objectStoreVersion;
+		crate->super->magic = MAGIC_LIB_SUPER;
+		crate->super->version = objectStoreVersion;
 		for (i = 0; i < objectStoreGroups; i++) {
-			store->super->headGroupOffset[i] = UINT64_MAX;
+			crate->super->headGroupOffset[i] = UINT64_MAX;
 		}
-		store->super->firstObjectOffset = sizeof(*store->super);
+		crate->super->firstObjectOffset = sizeof(*crate->super);
 
 		/*
 		 * Create the first free object.
 		 */
-		freeObject = store->map.ptr + store->super->firstObjectOffset;
-		freeObject->length = store->map.length -
-										store->super->firstObjectOffset;
+		freeObject = crate->map.ptr + crate->super->firstObjectOffset;
+		freeObject->length = crate->map.length -
+										crate->super->firstObjectOffset;
 		freeObject->length |= freeObjectBit | lastObjectBit;
 		freeObject->nextGroupOffset = UINT64_MAX;
-		setObjectTrailer(freeObject, store->super->firstObjectOffset);
+		setObjectTrailer(freeObject, crate->super->firstObjectOffset);
 
 		/*
 		 * Link the first free object.
 		 */
-		store->super->headGroupOffset[objectStoreGroups-1] =
-										store->super->firstObjectOffset;
+		crate->super->headGroupOffset[objectStoreGroups-1] =
+										crate->super->firstObjectOffset;
 	}
 
-	debugDump(store);
+	debugDump(crate);
 
-	return store;
+	return crate;
 }
 
 void *
 map(uint64_t offset, uint64_t length)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return NULL;
 	}
 
-	return mapObject(store, offset, length);
+	return mapObject(crate, offset, length);
 }
 
 uint64_t
 objectOffset(void *address)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return UINT64_MAX;
 	}
 
-	return objectOffsetLIB(store, address);
+	return objectOffsetLIB(crate, address);
 }
 
 void *
 dsAlloc(int length)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 	void *memory;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return NULL;
 	}
 
-	if ((memory = allocateObject(store, length)) == NULL) {
+	if ((memory = allocateObject(crate, length)) == NULL) {
 		log("Can't allocate object.\n");
 		return NULL;
 	}
@@ -625,13 +625,13 @@ dsAlloc(int length)
 }
 
 int
-dsSet(dsObjectStore *store)
+dsSet(dsCrate *crate)
 {
 	/*
-	 * Set thread specific object store handle.
+	 * Set thread specific object crate handle.
 	 */
 	pthread_once(&keyOnce, makeKey);
-	if (pthread_setspecific(key, store) < 0) {
+	if (pthread_setspecific(key, crate) < 0) {
 		log("Can't set pthread specific.\n");
 		return -1;
 	}
@@ -642,10 +642,10 @@ dsSet(dsObjectStore *store)
 int
 dsFree(void *address)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return -1;
 	}
 
@@ -653,52 +653,52 @@ dsFree(void *address)
 	return 0;
 }
 
-dsObjectStore *
+dsCrate *
 dsOpen(const char *filename, int create, int active)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 
-	if ((store = allocatedsObjectStore(filename, create)) == NULL) {
-		log("Can't allocate object store.\n");
+	if ((crate = allocatedsObjectStore(filename, create)) == NULL) {
+		log("Can't allocate object crate.\n");
 		return NULL;
 	}
 
 	if (active) {
-		if (dsSet(store) < 0) {
-			free(store);
+		if (dsSet(crate) < 0) {
+			free(crate);
 			return NULL;
 		}
 	}
 
-	return store;
+	return crate;
 }
 
 void
-dsClose(dsObjectStore **store)
+dsClose(dsCrate **crate)
 {
-	if (store == NULL || *store == NULL) {
+	if (crate == NULL || *crate == NULL) {
 		return;
 	}
 
-	if (getdsObjectStore() == *store) {
+	if (getdsObjectStore() == *crate) {
 		/*
-		 * Deactivate the object store.
+		 * Deactivate the object crate.
 		 */
 		dsSet(NULL);
 	}
 
-	freedsObjectStore(store);
+	freedsObjectStore(crate);
 }
 
 int
 dsSnapshot(const char *filename)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 	struct stat statBuffer;
 	int fd;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return -1;
 	}
 
@@ -715,7 +715,7 @@ dsSnapshot(const char *filename)
 		return -1;
 	}
 
-	if (fstat(store->fd, &statBuffer) < 0) {
+	if (fstat(crate->fd, &statBuffer) < 0) {
 		log("Can't fstat(%s,): %s\n", filename, strerror(errno));
 		return -1;
 	}
@@ -739,9 +739,9 @@ dsSnapshot(const char *filename)
 		filemap->fm_flags = FIEMAP_FLAG_SYNC;
 		filemap->fm_extent_count = MAX_EXTENT;
 
-		if (ioctl(store->fd, FS_IOC_FIEMAP, filemap) != 0) {
+		if (ioctl(crate->fd, FS_IOC_FIEMAP, filemap) != 0) {
 			log("Can't ioctl(%d, FS_IOC_FIEMAP,): %s\n",
-				store->fd, strerror(errno));
+				crate->fd, strerror(errno));
 			return -1;
 		}
 
@@ -760,7 +760,7 @@ dsSnapshot(const char *filename)
 				PRIX32 "\n", count, extent.fe_logical,
 				extent.fe_physical, extent.fe_length, extent.fe_flags);
 
-			void *buf = store->map.ptr + extent.fe_logical;
+			void *buf = crate->map.ptr + extent.fe_logical;
 
 			if (pwrite(fd, buf, extent.fe_length, extent.fe_logical) < 0) {
 				log("Can't pwrite(%d,,%lld,%lld): %s\n", fd, extent.fe_length,
@@ -781,17 +781,17 @@ dsSnapshot(const char *filename)
 int
 dsSync(int async)
 {
-	dsObjectStore *store;
+	dsCrate *crate;
 
-	if ((store = getdsObjectStore()) == NULL) {
-		log("Can't get object store.\n");
+	if ((crate = getdsObjectStore()) == NULL) {
+		log("Can't get object crate.\n");
 		return -1;
 	}
 
 	int flags = async ? MS_SYNC : MS_ASYNC;
 
-	if (msync(store->map.ptr, store->map.length, flags) < 0) {
-		log("Can't synchronize object store.\n");
+	if (msync(crate->map.ptr, crate->map.length, flags) < 0) {
+		log("Can't synchronize object crate.\n");
 		return -1;
 	}
 

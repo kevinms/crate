@@ -2,7 +2,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "crate.h"
+#include "crate_api.h"
 
 struct Player {
 	char name[4096];
@@ -41,8 +41,8 @@ int main()
 	struct Player *player;
 	struct Card *card;
 
-	dsObjectStore *store = dsOpen("bob", 1, 1);
-	dsSet(store);
+	dsCrate *crate = dsOpen("bob", 1, 1);
+	dsSet(crate);
 
 	player = dsAlloc(sizeof(*player));
 	memset(player, 0, sizeof(*player));

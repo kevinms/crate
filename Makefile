@@ -1,16 +1,17 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -Werror
 LDFLAGS = -lpthread
-HEADERS = private.h object.h list.h
-OBJECTS = main.o object.o list.o
+
+SOURCES=main.c crate.c list.c
+OBJECTS=$(SOURCES:.c=.o)
 
 all: main
 
-%.o: %.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 main: $(OBJECTS)
 	gcc $(CFLAGS) $(OBJECTS) $(LDFLAGS) -o $@
+
+%.o : %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(OBJECTS)

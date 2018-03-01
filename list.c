@@ -4,7 +4,7 @@
 #include <inttypes.h>
 
 #include "private.h"
-#include "object.h"
+#include "crate.h"
 #include "list.h"
 
 dsListEntry *
@@ -212,7 +212,7 @@ dsListDel(dsList *list, void *data)
 
 #if 0
 static inline int
-unlinkFromLinkeddsList(struct objectStore *store, void *object,
+unlinkFromLinkeddsList(dsCrate *crate, void *object,
 					 uint64_t magic, uint64_t offsetof,
 					 uint64_t *superOffset)
 {
@@ -230,7 +230,7 @@ unlinkFromLinkeddsList(struct objectStore *store, void *object,
 			/*
 			 * Unlink from neighbor node.
 			 */
-			if ((neighbor = mapObject(store,
+			if ((neighbor = mapObject(crate,
 									  linkOffset[i], sizeToMap)) == NULL) {
 				log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 					linkOffset[i], sizeToMap);
@@ -238,12 +238,12 @@ unlinkFromLinkeddsList(struct objectStore *store, void *object,
 			}
 			if (*(uint64_t *)neighbor != magic) {
 				log("Bad magic.\n");
-				unmapObject(store, neighbor);
+				unmapObject(crate, neighbor);
 				return(-1);
 			}
 
 			((uint64_t *)(neighbor+offsetof))[i^1] = linkOffset[i^1];
-			unmapObject(store, neighbor);
+			unmapObject(crate, neighbor);
 		} else {
 			/*
 			 * Unlink from super node.
