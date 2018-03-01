@@ -779,7 +779,7 @@ dsSnapshot(const char *filename)
 }
 
 int
-dsSync(int async)
+dsSync(int block)
 {
 	dsCrate *crate;
 
@@ -788,7 +788,7 @@ dsSync(int async)
 		return -1;
 	}
 
-	int flags = async ? MS_SYNC : MS_ASYNC;
+	int flags = block ? MS_SYNC : MS_ASYNC;
 
 	if (msync(crate->map.ptr, crate->map.length, flags) < 0) {
 		log("Can't synchronize object crate.\n");

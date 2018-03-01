@@ -66,7 +66,7 @@ int dsSnapshot(const char *filename);
  * On success, 0 is returned.
  * On error, -1 is returned and errno is set appropriately.
  */
-int dsSync(int async);
+int dsSync(int block);
 
 /*
  * The library will call 'callback' each time it wants to print a log message.
