@@ -6,17 +6,13 @@
  * own data structures on top of the dsCrate API.
  */
 
-#define dsLog(fmt, ...) dsRunLogCallback("%s(): " fmt, __func__, ##__VA_ARGS__)
-
-void dsRunLogCallback(const char *fmt, ...);
-
 /*
- * Structures used internally by the object store library.
+ * Structures used internally by the dsCrate interface.
  */
 #define MAGIC_LIB_SUPER     *(uint64_t *)"objSuper"
 
 /*
- * Structures built on top of the object store.
+ * Structures built on top of the dsCrate interface.
  */
 #define MAGIC_LIST       *(uint64_t *)"listObj"
 #define MAGIC_LISTENTRY  *(uint64_t *)"listEnty"
@@ -32,5 +28,11 @@ void *dsPtr(uint64_t offset, uint64_t length);
  * the crate file.
  */
 uint64_t dsOffset(void *address);
+
+/*
+ * Call the global log callback set by dsLogger().
+ */
+#define dsLog(fmt, ...) dsRunLogCallback("%s(): " fmt, __func__, ##__VA_ARGS__)
+void dsRunLogCallback(const char *fmt, ...);
 
 #endif

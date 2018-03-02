@@ -61,7 +61,7 @@ This library also provides a set of common data structures that all sit on top o
 List example:
 
 ```c
-dsCrate *crate = dsOpen("new-store", 1, 1);
+dsCrate *crate = dsOpen("path/to/myCrate", 1, 1);
 
 dsList *list = dsListAlloc();
 
