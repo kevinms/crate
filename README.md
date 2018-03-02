@@ -32,6 +32,14 @@ int *data = dsAlloc(sizeof(*data));
 dsFree(data);
 ```
 
+Using ```dsSetIndex()``` and ```dsGetIndex()```, ...
+```
+int *data = dsAlloc(sizeof(*data));
+
+dsSetIndex(data, sizeof(*data));
+data = dsGetIndex();
+```
+
 As data is added and removed from a crate it is asynchronously flushed to the crate file given to ```dsOpen()```. Given an undefined amount of time, all changes will "eventually" be flushed to the file. The changes may be flushed synchronously and on-demand by calling either ```dsSync()``` or ```dsClose()```.
 
 ```
@@ -55,6 +63,8 @@ List example:
 dsCrate *crate = dsOpen("new-store", 1, 1);
 
 dsList *list = dsListAlloc();
+
+dsSetIndex(list, sizeof(*list));
 
 int i;
 for (i = 0; i < 10; i++) {

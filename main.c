@@ -36,16 +36,21 @@ void printCards(dsList *deck)
 	}
 }
 
+#include "crate_internal.h"
+
 int main()
 {
 	struct Player *player;
 	struct Card *card;
 
+	dsLogger(dsLogToStderr, NULL);
 	dsCrate *crate = dsOpen("bob", 1, 1);
 	dsSet(crate);
 
 	player = dsAlloc(sizeof(*player));
 	memset(player, 0, sizeof(*player));
+
+	dsSetIndex(player, sizeof(*player));
 
 	strcpy(player->name, "Kilvin");
 	dsListInit(&player->deck);

@@ -1,11 +1,12 @@
 #define _GNU_SOURCE
 
+#include "list.h"
+
 #include <stdio.h>
 #include <inttypes.h>
 
-#include "private.h"
 #include "crate.h"
-#include "list.h"
+#include "crate_internal.h"
 
 dsListEntry *
 dsListAdd(dsList *list, void *data)
@@ -16,19 +17,19 @@ dsListAdd(dsList *list, void *data)
 	uint64_t dataOffset;
 
 	if (list == NULL) {
-		log("Bad argument: %p\n", list);
+		dsLog("Bad argument: %p\n", list);
 		return(NULL);
 	}
 
 	if ((entry = dsAlloc(sizeof(*entry))) == NULL) {
-		log("Can't allocate list entry object.\n");
+		dsLog("Can't allocate list entry object.\n");
 		return(NULL);
 	}
 
-	listEntryOffset = objectOffset(entry);
-	dataOffset = objectOffset(data);
+	listEntryOffset = dsOffset(entry);
+	dataOffset = dsOffset(data);
 
-	debug("listEntryOffset: %" PRIu64 ", dataOffset: %" PRIu64 "\n",\
+	dsLog("listEntryOffset: %" PRIu64 ", dataOffset: %" PRIu64 "\n",\
 		  listEntryOffset, dataOffset);
 
 	/*
@@ -36,10 +37,10 @@ dsListAdd(dsList *list, void *data)
 	 */
 	next = NULL;
 	if (list->headOffset != UINT64_MAX) {
-		if ((next = map(list->headOffset, sizeof(*next))) == NULL) {
-			log("Can't map list next offset.\n");
+		if ((next = dsPtr(list->headOffset, sizeof(*next))) == NULL) {
+			dsLog("Can't map list next offset.\n");
 			if (dsFree(entry) < 0) {
-				log("Can't free list entry object.\n");
+				dsLog("Can't free list entry object.\n");
 			}
 			return(NULL);
 		}
@@ -67,8 +68,8 @@ dsListBegin(dsList *list)
 		return(NULL);
 	}
 
-	if ((entry = map(list->headOffset, sizeof(*entry))) == NULL) {
-		log("Can't map list head.\n");
+	if ((entry = dsPtr(list->headOffset, sizeof(*entry))) == NULL) {
+		dsLog("Can't map list head.\n");
 		return(NULL);
 	}
 
@@ -82,10 +83,10 @@ dsListNext(dsListEntry *entry)
 		return(NULL);
 	}
 
-	debug("next: %" PRIu64 "\n", entry->nextOffset);
+	dsLog("next: %" PRIu64 "\n", entry->nextOffset);
 
-	if ((entry = map(entry->nextOffset, sizeof(*entry))) == NULL) {
-		log("Can't map next list entry.\n");
+	if ((entry = dsPtr(entry->nextOffset, sizeof(*entry))) == NULL) {
+		dsLog("Can't map next list entry.\n");
 		return(NULL);
 	}
 
@@ -97,8 +98,8 @@ dsListData(dsListEntry *entry)
 {
 	void *data;
 
-	if ((data = map(entry->dataOffset, sizeof(*entry))) == NULL) {
-		log("Can't map list data.\n");
+	if ((data = dsPtr(entry->dataOffset, sizeof(*entry))) == NULL) {
+		dsLog("Can't map list data.\n");
 		return(NULL);
 	}
 
@@ -150,7 +151,7 @@ dsListDel(dsList *list, void *data)
 	uint64_t dataOffset;
 	uint64_t listEntryOffset;
 
-	dataOffset = objectOffset(data);
+	dataOffset = dsOffset(data);
 
 	for (entry = dsListBegin(list);
 		 entry != NULL;
@@ -164,16 +165,16 @@ dsListDel(dsList *list, void *data)
 			 * Found the entry to remove.
 			 */
 			if (entry->prevOffset != UINT64_MAX) {
-				if ((prev = map(entry->prevOffset,
+				if ((prev = dsPtr(entry->prevOffset,
 								sizeof(*entry))) == NULL) {
-					log("Can't map list previous offset.\n");
+					dsLog("Can't map list previous offset.\n");
 					return(-1);
 				}
 			}
 			if (entry->nextOffset != UINT64_MAX) {
-				if ((next = map(entry->nextOffset,
+				if ((next = dsPtr(entry->nextOffset,
 								sizeof(*entry))) == NULL) {
-					log("Can't map list next offset.\n");
+					dsLog("Can't map list next offset.\n");
 					return(-1);
 				}
 			}
@@ -188,7 +189,7 @@ dsListDel(dsList *list, void *data)
 				next->prevOffset = entry->prevOffset;
 			}
 
-			listEntryOffset = objectOffset(entry);
+			listEntryOffset = dsOffset(entry);
 			if (listEntryOffset == list->headOffset) {
 				/*
 				 * This was the first list entry.
@@ -199,7 +200,7 @@ dsListDel(dsList *list, void *data)
 			list->count--;
 
 			if (dsFree(entry) < 0) {
-				log("Can't free list entry object.\n");
+				dsLog("Can't free list entry object.\n");
 				return(-1);
 			}
 
@@ -232,12 +233,12 @@ unlinkFromLinkeddsList(dsCrate *crate, void *object,
 			 */
 			if ((neighbor = mapObject(crate,
 									  linkOffset[i], sizeToMap)) == NULL) {
-				log("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
+				dsLog("Can't mapObject(,%" PRIu64 ",%" PRIu64 ")\n",
 					linkOffset[i], sizeToMap);
 				return(-1);
 			}
 			if (*(uint64_t *)neighbor != magic) {
-				log("Bad magic.\n");
+				dsLog("Bad magic.\n");
 				unmapObject(crate, neighbor);
 				return(-1);
 			}
