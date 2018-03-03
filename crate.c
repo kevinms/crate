@@ -80,15 +80,20 @@ void
 dsRunLogCallback(const char *fmt, ...)
 {
 	va_list ap;
+	dsLogCallback callback;
+	void *userPtr;
 
 	if (logCallback == NULL) {
 		return;
 	}
 
-	va_start(ap, fmt);
 	pthread_rwlock_rdlock(&logLock);
-	logCallback(logUserPtr, fmt, ap);
+	callback = logCallback;
+	userPtr = logUserPtr;
 	pthread_rwlock_unlock(&logLock);
+
+	va_start(ap, fmt);
+	callback(userPtr, fmt, ap);
 	va_end(ap);
 }
 
@@ -159,9 +164,31 @@ unmapObject(dsCrate *crate, void *address)
 	return;
 }
 
+#if 0
+static dsMapping *
+makeMapping(dsCrate *crate)
+{
+	if (crate == NULL) {
+		dsLog("Bad argument %p\n", crate);
+		return NULL;
+	}
+
+	if ((offset < crate->map.offset) ||
+		(offset + length > crate->map.offset + crate->map.length)) {
+		dsLog("Can't map region outside of crate.\n");
+		return NULL;
+	}
+
+	return crate->map.ptr + offset;
+}
+#endif
+
 static void
 freeMapping(dsMapping *mapping)
 {
+	if (mapping == NULL) {
+		return;
+	}
 	if ((mapping->ptr != NULL) &&
 		(munmap(mapping->ptr, mapping->length) < 0)) {
 		dsLog("Can't munmap(%p,%" PRIu64 "): %s", mapping->ptr,
@@ -565,13 +592,13 @@ unlockCrate(dsCrate *crate)
 static void *
 openCrate(const char *filename, int create)
 {
-	dsCrate *crate;
+	dsCrate *crate = NULL;
 	struct stat statBuffer;
 	int flags = 0;
 
 	if ((crate = malloc(sizeof(*crate))) == NULL) {
 		dsLog("Can't allocate crate.\n");
-		return NULL;
+		goto error;
 	}
 	memset(crate, 0, sizeof(*crate));
 	crate->filename = strdup(filename);
@@ -583,37 +610,38 @@ openCrate(const char *filename, int create)
 
 	if ((crate->fd = open(filename, flags, S_IRUSR | S_IWUSR)) < 0) {
 		dsLog("Can't open %s: %s\n", filename, strerror(errno));
-		return NULL;
+		goto error;
 	}
 
 	if (lockCrate(crate) < 0) {
-		return NULL;
+		goto error;
 	}
 
 	if (fstat(crate->fd, &statBuffer) < 0) {
 		dsLog("Can't fstat(%s,): %s\n", filename, strerror(errno));
-		return NULL;
+		goto error;
 	}
 
 	if (statBuffer.st_size == 0) {
 		/*
 		 * Create a giant fixed size sparse file.
 		 */
-		//crate->map.length = 32ULL*(1<<30);
 		crate->map.length = 5*(1<<20);
-		//crate->map.length = 500*(1<<20);
 
 		if (ftruncate(crate->fd, crate->map.length) < 0) {
 			dsLog("Can't ftruncate(%s, %" PRIu64 "): %s\n", filename,
 				crate->map.length, strerror(errno));
-			return NULL;
+			goto error;
 		}
+	} else {
+		crate->map.length = statBuffer.st_size;
 	}
+
 	if ((crate->map.ptr = mmap(0, crate->map.length,
-							   PROT_READ | PROT_WRITE,
-							   MAP_SHARED, crate->fd, 0)) == MAP_FAILED) {
+					PROT_READ | PROT_WRITE,
+					MAP_SHARED, crate->fd, 0)) == MAP_FAILED) {
 		dsLog("Can't map shared memory: %s\n", strerror(errno));
-		return NULL;
+		goto error;
 	}
 
 	crate->super = crate->map.ptr;
@@ -650,10 +678,15 @@ openCrate(const char *filename, int create)
 	}
 
 	unlockCrate(crate);
-
 	debugDump(crate);
 
 	return crate;
+
+error:
+
+	freeCrate(&crate);
+
+	return NULL;
 }
 
 void *

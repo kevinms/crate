@@ -88,8 +88,12 @@ int dsSync(int block);
 
 /*
  * The library will call 'callback' each time it wants to print a log message.
- * The callback may be set to NULL to never print library log messages.
- * If a logger is not explicitly set with this function, it defaults to NULL.
+ * The callback may be set to NULL to never print library log messages. If a
+ * logger is not explicitly set with this function, it defaults to NULL.
+ *
+ * The 'callback' is a process global setting and can't be set per-thread. If
+ * you would like separate logging per thread, then use thread-local storage
+ * like pthread_specific* or check the thread ID inside the logger callback.
  *
  * On success, zero is returned.
  * On error, -1 is returned and errno is set appropriately.
