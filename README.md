@@ -2,7 +2,7 @@
 
 Crate is an extensible C library providing a set of common data structures and a way to persist them to disk.
 
-A desire to have python-like serialization features, i.e. ``pickle```, but in a C environment spurred the creation of this library.
+A desire to have python-like serialization features, i.e. ```pickle```, but in a C environment spurred the creation of this library.
 
 ---
 ### The Crate Interface
@@ -34,7 +34,7 @@ dsFree(data);
 ```
 
 Using ```dsSetIndex()``` and ```dsGetIndex()```, ...
-```
+```c
 int *data = dsAlloc(sizeof(*data));
 
 dsSetIndex(data, sizeof(*data));
