@@ -1,15 +1,11 @@
 #include <stdio.h>
-#include <string.h>
-#include <sys/time.h>
 
-#include "crate.h"
-#include "list.h"
+#include <crate.h>
+#include <list.h>
 
 struct Item {
 	int id;
 };
-
-#include "crate_internal.h"
 
 int main()
 {

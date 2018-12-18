@@ -70,6 +70,7 @@ dsSetIndex(list, sizeof(*list));
 int i;
 for (i = 0; i < 10; i++) {
 	int *data = dsAlloc(sizeof(*data));
+	*data = i;
 	dsListAdd(list, data);
 }
 
