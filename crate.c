@@ -72,8 +72,14 @@ typedef struct dsCrate {
 /*
  * Logging.
  */
+void
+dsLogToStderr(void *userPtr, const char *format, va_list args)
+{
+	vfprintf(stderr, format, args);
+}
+
 static pthread_rwlock_t logLock = PTHREAD_RWLOCK_INITIALIZER;
-static dsLogCallback logCallback = NULL;
+static dsLogCallback logCallback = dsLogToStderr;
 static void *logUserPtr = NULL;
 
 void
@@ -106,12 +112,6 @@ dsLogger(dsLogCallback callback, void *userPtr)
 	pthread_rwlock_unlock(&logLock);
 
 	return 0;
-}
-
-void
-dsLogToStderr(void *userPtr, const char *format, va_list args)
-{
-	vfprintf(stderr, format, args);
 }
 
 /*
@@ -339,7 +339,7 @@ debugDump(dsCrate *crate)
 		dsLog("%d %-20" PRIu64 "\n", i, crate->super->headGroupOffset[i]);
 	}
 
-	dsLog("%-20s: %-4s %-4s %-20s %-20s %-20s\n",
+	dsLog("%-20s %-4s %-4s %-20s %-20s %-20s\n",
 		"@offset", "free", "last", "length", "next", "offset");
 	while (object != NULL) {
 		uint64_t offset;
@@ -366,6 +366,19 @@ debugDump(dsCrate *crate)
 	}
 
 	return 0;
+}
+
+int
+dsDebugDump()
+{
+	dsCrate *crate;
+
+	if ((crate = getActiveCrate()) == NULL) {
+		dsLog("Can't get active crate.\n");
+		return -1;
+	}
+
+	return debugDump(crate);
 }
 
 static int
@@ -412,7 +425,7 @@ static int
 getGroup(uint64_t length)
 {
 	#if 0
-	return (int)(dsLog((double)length) / dsLog(1024));
+	return (int)(log((double)length) / log(1024));
 	#else
 	int i;
 	for (i = 0; length >= 1024; i++, length /= 1024);
@@ -655,9 +668,13 @@ openCrate(const char *filename, int create)
 		crate->super->magic = MAGIC_LIB_SUPER;
 		crate->super->version = crateVersion;
 		crate->super->indexObjectOffset = UINT64_MAX;
+		crate->super->indexObjectLength = 0;
 		for (i = 0; i < objectGroups; i++) {
 			crate->super->headGroupOffset[i] = UINT64_MAX;
 		}
+		/*
+		 * First object comes directly after the super object.
+		 */
 		crate->super->firstObjectOffset = sizeof(*crate->super);
 
 		/*
@@ -673,8 +690,8 @@ openCrate(const char *filename, int create)
 		/*
 		 * Link the first free object.
 		 */
-		crate->super->headGroupOffset[objectGroups-1] =
-										crate->super->firstObjectOffset;
+		int group = getGroup(freeObject->length & ~freeObjectBit);
+		crate->super->headGroupOffset[group] = crate->super->firstObjectOffset;
 	}
 
 	unlockCrate(crate);
@@ -762,8 +779,8 @@ dsFree(void *address)
 	}
 
 	//TODO: Actually free the object.
-
 	address = 0;
+
 	return 0;
 }
 

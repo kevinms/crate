@@ -35,4 +35,10 @@ uint64_t dsOffset(void *address);
 #define dsLog(fmt, ...) dsRunLogCallback("%s(): " fmt, __func__, ##__VA_ARGS__)
 void dsRunLogCallback(const char *fmt, ...);
 
+/*
+ * Scan the crate and print internal information about every object found.
+ * This low-level function is just one step above a hexdump in readability.
+ */
+int dsDebugDump();
+
 #endif
